@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>สายพานคัดแยกเศษส่วน (Fraction Sorter) - ปรับความเร็วสำหรับ ป.4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;800;900&family=Fredoka+One&display=swap');
+        
+        html, body {
+            font-family: 'Sarabun', sans-serif;
+            user-select: none; -webkit-user-select: none;
+            touch-action: none; overscroll-behavior: none;
+            height: 100vh; height: 100dvh; margin: 0; overflow: hidden;
+            background-color: #0f172a; 
+        }
+
+        /* 3D Arcade Buttons */
+        .btn-arcade {
+            position: relative;
+            transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(0);
+        }
+        .btn-arcade-green {
+            background: linear-gradient(180deg, #22c55e 0%, #16a34a 100%);
+            box-shadow: 0 8px 0 #14532d, 0 15px 20px rgba(0,0,0,0.4);
+            border-top: 2px solid #86efac;
+        }
+        .btn-arcade-green:active {
+            transform: translateY(8px);
+            box-shadow: 0 0px 0 #14532d, 0 5px 10px rgba(0,0,0,0.4);
+        }
+        .btn-arcade-orange {
+            background: linear-gradient(180deg, #f97316 0%, #ea580c 100%);
+            box-shadow: 0 8px 0 #7c2d12, 0 15px 20px rgba(0,0,0,0.4);
+            border-top: 2px solid #fdba74;
+        }
+        .btn-arcade-orange:active {
+            transform: translateY(8px);
+            box-shadow: 0 0px 0 #7c2d12, 0 5px 10px rgba(0,0,0,0.4);
+        }
+
+        /* Conveyor Belts */
+        .conveyor-normal { background: repeating-linear-gradient(0deg, #374151, #374151 30px, #1f2937 30px, #1f2937 60px); box-shadow: inset 0 0 30px rgba(0,0,0,0.8); }
+        .conveyor-lava { background: repeating-linear-gradient(0deg, #7f1d1d, #7f1d1d 30px, #450a0a 30px, #450a0a 60px); box-shadow: inset 0 0 30px rgba(220,38,38,0.5); }
+        .conveyor-space { background: repeating-linear-gradient(0deg, #1e1b4b, #1e1b4b 30px, #0f172a 30px, #0f172a 60px); box-shadow: inset 0 0 30px rgba(139,92,246,0.5); }
+
+        .conveyor-anim { animation: moveConveyor 1.5s linear infinite; }
+        .conveyor-anim-slow { animation: moveConveyor 4s linear infinite; }
+
+        @keyframes moveConveyor { from { background-position: 0 0; } to { background-position: 0 60px; } }
+
+        .fraction-line { border-bottom: 5px solid #1e3a8a; width: 90%; margin: 6px auto; border-radius: 4px; }
+        
+        #falling-item { 
+            transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s; 
+            will-change: transform;
+        }
+        
+        /* Fever Mode */
+        @keyframes rainbowGlow {
+            0% { box-shadow: 0 0 20px #ff0000, inset 0 0 15px #ff0000; border-color: #ff0000; }
+            33% { box-shadow: 0 0 20px #00ff00, inset 0 0 15px #00ff00; border-color: #00ff00; }
+            66% { box-shadow: 0 0 20px #0000ff, inset 0 0 15px #0000ff; border-color: #0000ff; }
+            100% { box-shadow: 0 0 20px #ff0000, inset 0 0 15px #ff0000; border-color: #ff0000; }
+        }
+        .fever-active {
+            animation: rainbowGlow 1s linear infinite !important;
+            background-color: #fffbeb !important;
+        }
+
+        /* Floating Score Pop-up */
+        @keyframes popUp {
+            0% { transform: translateY(0) scale(0.5); opacity: 1; }
+            50% { transform: translateY(-40px) scale(1.5); opacity: 1; }
+            100% { transform: translateY(-80px) scale(1); opacity: 0; }
+        }
+        .score-popup {
+            position: absolute;
+            font-family: 'Fredoka One', cursive, sans-serif;
+            font-size: 3rem;
+            font-weight: 900;
+            color: #fbbf24;
+            text-shadow: 0 4px 0 #b45309, 0 0 20px rgba(255,255,255,0.8);
+            pointer-events: none;
+            animation: popUp 0.8s ease-out forwards;
+            z-index: 50;
+        }
+
+        #fever-overlay { transition: opacity 0.3s; pointer-events: none; }
+        #combo-text { transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform: scale(0.5); opacity: 0; }
+        .show-combo { transform: scale(1.2) rotate(-5deg) !important; opacity: 1 !important; }
+    </style>
+</head>
+<body class="bg-blue-50 flex flex-col transition-colors duration-700" id="body-bg">
+
+    <!-- Header / UI -->
+    <header class="bg-white/95 backdrop-blur shadow-lg px-3 py-2 sm:p-4 flex justify-between items-center z-20 shrink-0 relative border-b-4 border-gray-200" id="header-bg">
+        <div class="text-base sm:text-2xl font-black text-blue-800 bg-blue-100 px-4 py-2 rounded-xl border-b-4 border-blue-300 relative overflow-hidden flex items-center gap-2 shadow-inner">
+            <span class="text-xl">⭐</span>
+            <span id="score" class="text-2xl sm:text-3xl font-['Fredoka_One']">0</span>
+            <div id="multiplier-badge" class="absolute top-0 right-0 bg-yellow-400 text-red-700 text-[10px] px-2 py-0.5 rounded-bl-lg font-black hidden animate-bounce">x2</div>
+        </div>
+        
+        <!-- Combo Indicator -->
+        <div class="text-center absolute left-1/2 transform -translate-x-1/2 top-16 sm:top-4 z-50 pointer-events-none">
+            <div id="combo-text" class="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-500 drop-shadow-[0_4px_4px_rgba(0,0,0,0.3)]">
+                COMBO x<span id="combo-count">0</span>!
+            </div>
+            <div id="fever-text" class="text-4xl sm:text-6xl font-black text-yellow-400 drop-shadow-[0_4px_0_#b45309] hidden mt-2">
+                🔥 FEVER! 🔥
+            </div>
+        </div>
+
+        <div class="text-xl sm:text-3xl font-black text-gray-800 hidden sm:block text-center flex-1 transition-colors drop-shadow-sm" id="level-title">
+            🏭 โรงงานคัดแยก
+        </div>
+        
+        <div class="text-base sm:text-xl font-bold bg-red-100 px-4 py-2 rounded-xl flex items-center gap-1 border-b-4 border-red-300 shadow-inner">
+            <span id="hearts" class="tracking-widest text-xl sm:text-2xl drop-shadow-md">❤️❤️❤️❤️❤️</span>
+        </div>
+    </header>
+
+    <!-- Overlays -->
+    <div id="fever-overlay" class="absolute inset-0 z-15 bg-gradient-to-b from-yellow-400/30 to-pink-500/30 mix-blend-overlay opacity-0"></div>
+    <div id="slow-overlay" class="absolute inset-0 z-15 bg-blue-500/20 mix-blend-overlay opacity-0 pointer-events-none transition-opacity duration-300"></div>
+
+    <!-- Game Area -->
+    <main class="flex-1 relative w-full max-w-2xl mx-auto flex justify-center bg-gray-900 border-x-[12px] border-gray-800 conveyor-normal conveyor-anim overflow-hidden z-10 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] transition-colors duration-700" id="game-area">
+        
+        <div class="absolute bottom-0 w-full h-24 bg-gradient-to-t from-red-600/60 to-transparent z-10 pointer-events-none"></div>
+
+        <!-- Falling Item -->
+        <div id="falling-item" class="absolute top-0 bg-white rounded-3xl shadow-[0_15px_30px_rgba(0,0,0,0.6)] border-[6px] border-gray-400 p-2 flex justify-center items-center min-w-[110px] min-h-[110px] sm:min-w-[150px] sm:min-h-[150px] hidden z-20">
+            <!-- Content -->
+        </div>
+    </main>
+
+    <!-- Controls -->
+    <footer class="bg-gray-100 p-4 sm:p-6 shrink-0 z-20 transition-colors border-t-8 border-gray-300" id="footer-bg">
+        <div class="w-full max-w-3xl mx-auto flex gap-4 sm:gap-8 h-32 sm:h-40 mb-2 relative">
+            
+            <button onclick="sortItem('proper', event)" class="btn-arcade btn-arcade-green flex-1 rounded-[2rem] flex flex-col justify-center items-center p-2 relative overflow-hidden group">
+                <div class="absolute inset-0 bg-white/20 transform -translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                <span class="text-4xl sm:text-6xl mb-1 drop-shadow-lg">👈</span>
+                <span class="text-xl sm:text-3xl font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)] tracking-wide">เศษส่วนแท้</span>
+                <span class="text-xs sm:text-sm font-bold bg-black/20 text-white px-3 py-1 rounded-full mt-1">เศษ < ส่วน</span>
+            </button>
+            
+            <button onclick="sortItem('improper', event)" class="btn-arcade btn-arcade-orange flex-1 rounded-[2rem] flex flex-col justify-center items-center p-2 relative overflow-hidden group">
+                <div class="absolute inset-0 bg-white/20 transform -translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                <span class="text-4xl sm:text-6xl mb-1 drop-shadow-lg">👉</span>
+                <span class="text-xl sm:text-3xl font-black text-white drop-shadow-[0_2px_2px_rgba(0,0,0,0.5)] tracking-wide">เศษส่วนเกิน</span>
+                <span class="text-xs sm:text-sm font-bold bg-black/20 text-white px-3 py-1 rounded-full mt-1">เศษ ≥ ส่วน</span>
+            </button>
+
+        </div>
+    </footer>
+
+    <!-- Modals -->
+    <div id="game-over" class="fixed inset-0 bg-gray-900/90 hidden flex justify-center items-center z-50 p-4 backdrop-blur-sm">
+        <div class="bg-white p-6 sm:p-8 rounded-[2rem] text-center max-w-md w-full shadow-[0_0_50px_rgba(0,0,0,0.5)] border-8 border-blue-100 my-auto transform scale-100">
+            <h2 class="text-4xl font-black text-red-500 mb-2 drop-shadow-sm">จบเกม!</h2>
+            <div class="bg-blue-50 rounded-2xl p-4 mb-4 border-2 border-blue-100">
+                <p class="text-gray-500 font-bold mb-1">คะแนนรวม</p>
+                <div id="final-score" class="text-6xl text-blue-600 font-black font-['Fredoka_One']">0</div>
+                <div id="rank-title" class="text-2xl font-black text-purple-600 mt-2 bg-purple-100 inline-block px-4 py-1 rounded-full">🐣 ทดลองงาน</div>
+            </div>
+            <button onclick="startGame()" class="btn-arcade bg-blue-500 w-full py-4 rounded-2xl text-white text-2xl font-black border-t-2 border-blue-300 shadow-[0_8px_0_#1e3a8a,0_15px_20px_rgba(0,0,0,0.4)] active:shadow-[0_0px_0_#1e3a8a,0_5px_10px_rgba(0,0,0,0.4)]">
+                🔄 เล่นอีกครั้ง
+            </button>
+        </div>
+    </div>
+
+    <div id="start-screen" class="fixed inset-0 bg-blue-900/95 flex justify-center items-center z-50 p-4 backdrop-blur-md">
+        <div class="bg-white p-6 sm:p-8 rounded-[2rem] text-center max-w-md w-full shadow-[0_0_50px_rgba(250,204,21,0.4)] border-8 border-yellow-400">
+            <div class="text-6xl mb-4 animate-bounce">🏭</div>
+            <h1 class="text-3xl sm:text-5xl font-black text-blue-800 mb-6 leading-tight drop-shadow-sm">โรงงานคัดแยก<br><span class="text-orange-500">เศษส่วน</span></h1>
+            
+            <div class="text-left bg-gray-50 p-4 rounded-2xl text-sm sm:text-base font-bold text-gray-700 mb-6 space-y-3 border-2 border-gray-200">
+                <div class="flex items-center gap-2"><span class="text-2xl">👈</span> <span class="text-green-600">เศษส่วนแท้</span> (บนน้อยกว่าล่าง)</div>
+                <div class="flex items-center gap-2"><span class="text-2xl">👉</span> <span class="text-orange-600">เศษส่วนเกิน</span> (บนมากกว่า/เท่ากับล่าง)</div>
+                <hr class="border-gray-300">
+                <div class="flex items-center gap-2">❤️ เพิ่มเลือด | ⏳ สโลว์สายพาน | 💣 ห้ามกด!</div>
+            </div>
+
+            <button onclick="startGame()" class="btn-arcade bg-green-500 w-full py-5 rounded-2xl text-white text-3xl font-black border-t-2 border-green-300 shadow-[0_8px_0_#14532d,0_15px_20px_rgba(0,0,0,0.4)] active:shadow-[0_0px_0_#14532d,0_5px_10px_rgba(0,0,0,0.4)]">
+                ▶️ เริ่มทำงาน!
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let audioCtx;
+        
+        function initAudio() {
+            if (!audioCtx) audioCtx = new AudioContext();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playSound(type) {
+            if(!audioCtx) return;
+            const t = audioCtx.currentTime;
+
+            if(type === 'correct') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, t); 
+                osc.frequency.exponentialRampToValueAtTime(1760, t + 0.1); 
+                gain.gain.setValueAtTime(0.4, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+                osc.start(t); osc.stop(t + 0.2);
+            } 
+            else if (type === 'wrong') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, t);
+                osc.frequency.linearRampToValueAtTime(100, t + 0.3);
+                gain.gain.setValueAtTime(0.5, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+                osc.start(t); osc.stop(t + 0.3);
+            }
+            else if (type === 'heart') {
+                const freqs = [523.25, 659.25, 783.99, 1046.50]; 
+                freqs.forEach((freq, i) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(freq, t + (i * 0.1));
+                    gain.gain.setValueAtTime(0, t + (i * 0.1));
+                    gain.gain.linearRampToValueAtTime(0.2, t + (i * 0.1) + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.01, t + (i * 0.1) + 0.1);
+                    osc.start(t + (i * 0.1)); osc.stop(t + (i * 0.1) + 0.1);
+                });
+            }
+            else if (type === 'hourglass') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(600, t);
+                osc.frequency.exponentialRampToValueAtTime(100, t + 0.6);
+                gain.gain.setValueAtTime(0.4, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+                osc.start(t); osc.stop(t + 0.6);
+            }
+            else if (type === 'bomb') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'square'; 
+                osc.frequency.setValueAtTime(100, t);
+                osc.frequency.exponentialRampToValueAtTime(10, t + 0.5);
+                
+                const mod = audioCtx.createOscillator();
+                const modGain = audioCtx.createGain();
+                mod.type = 'sawtooth';
+                mod.frequency.setValueAtTime(50, t);
+                modGain.gain.setValueAtTime(50, t);
+                mod.connect(modGain);
+                modGain.connect(osc.frequency);
+                
+                gain.gain.setValueAtTime(0.8, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.6);
+                
+                osc.start(t); mod.start(t);
+                osc.stop(t + 0.6); mod.stop(t + 0.6);
+            }
+            else if (type === 'fever') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'sine'; 
+                osc.frequency.setValueAtTime(400, t);
+                osc.frequency.linearRampToValueAtTime(800, t + 0.1);
+                osc.frequency.linearRampToValueAtTime(1600, t + 0.2);
+                gain.gain.setValueAtTime(0.3, t);
+                gain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+                osc.start(t); osc.stop(t + 0.4);
+            }
+        }
+
+        // ปรับความเร็วเริ่มต้นลงให้เหมาะกับ ป.4 (ลดจาก 2.5 เหลือ 1.5)
+        let score = 0, hearts = 5, isPlaying = false, itemY = -250;
+        let currentItemType = '', baseSpeed = 1.5, speedMultiplier = 1.0;
+        let animationFrameId, isAnimatingSort = false;
+        let combo = 0, isFever = false, feverTimeout = null, slowTimeout = null;
+
+        const ui = {
+            fallingItem: document.getElementById('falling-item'),
+            score: document.getElementById('score'),
+            hearts: document.getElementById('hearts'),
+            gameArea: document.getElementById('game-area'),
+            comboText: document.getElementById('combo-text'),
+            comboCount: document.getElementById('combo-count'),
+            feverText: document.getElementById('fever-text'),
+            feverOverlay: document.getElementById('fever-overlay'),
+            slowOverlay: document.getElementById('slow-overlay'),
+            multiplierBadge: document.getElementById('multiplier-badge'),
+            levelTitle: document.getElementById('level-title'),
+            body: document.getElementById('body-bg'),
+            header: document.getElementById('header-bg'),
+            footer: document.getElementById('footer-bg')
+        };
+
+        function getRandomInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+        function generateData() {
+            let innerHtml = '';
+            if (score > 2 && Math.random() < 0.15) {
+                const items = ['heart', 'hourglass', 'bomb'];
+                currentItemType = items[Math.floor(Math.random() * items.length)];
+                ui.fallingItem.className = "absolute top-0 bg-white rounded-full shadow-[0_15px_30px_rgba(0,0,0,0.6)] border-[6px] flex justify-center items-center text-6xl sm:text-[5rem] min-w-[110px] min-h-[110px] sm:min-w-[130px] sm:min-h-[130px] z-20";
+                
+                if(currentItemType === 'heart') { ui.fallingItem.classList.add('border-pink-500', 'bg-pink-50'); innerHtml = '❤️'; }
+                if(currentItemType === 'hourglass') { ui.fallingItem.classList.add('border-blue-400', 'bg-blue-50'); innerHtml = '⏳'; }
+                if(currentItemType === 'bomb') { ui.fallingItem.classList.add('border-gray-800', 'bg-red-100'); innerHtml = '💣'; }
+            } else {
+                ui.fallingItem.className = "absolute top-0 bg-white rounded-3xl shadow-[0_15px_30px_rgba(0,0,0,0.6)] border-[6px] p-2 flex justify-center items-center flex-col min-w-[110px] min-h-[110px] sm:min-w-[140px] sm:min-h-[140px] z-20";
+                
+                const isProper = Math.random() > 0.5;
+                let n, d;
+                if (isProper) {
+                    d = getRandomInt(2, 9); n = getRandomInt(1, d - 1); currentItemType = 'proper';
+                    ui.fallingItem.classList.add(isFever ? 'fever-active' : 'border-green-400');
+                } else {
+                    d = getRandomInt(2, 6); n = getRandomInt(d, d + 5); currentItemType = 'improper';
+                    ui.fallingItem.classList.add(isFever ? 'fever-active' : 'border-orange-400');
+                }
+
+                if (Math.random() > 0.4) {
+                    innerHtml = generateVisualHTML(n, d);
+                } else {
+                    innerHtml = `<div class="flex flex-col items-center text-5xl sm:text-7xl font-black text-blue-900 leading-none drop-shadow-md"><span>${n}</span><div class="fraction-line"></div><span>${d}</span></div>`;
+                }
+            }
+            return innerHtml;
+        }
+
+        function generateVisualHTML(n, d) {
+            const numBlocks = Math.ceil(n / d) || 1;
+            let html = '<div class="flex flex-wrap gap-2 justify-center max-w-[140px] sm:max-w-[180px]">';
+            let partsColored = 0;
+            for (let i = 0; i < numBlocks; i++) {
+                html += `<div class="flex border-4 border-gray-800 rounded-lg overflow-hidden bg-white h-8 sm:h-12 w-14 sm:w-20 shadow-md">`;
+                for (let j = 0; j < d; j++) {
+                    let bgColor = (partsColored < n) ? (isFever ? 'bg-yellow-400' : 'bg-pink-500') : 'bg-transparent';
+                    let borderRight = (j < d - 1) ? 'border-r-2 border-gray-400' : '';
+                    html += `<div class="flex-1 ${bgColor} ${borderRight}"></div>`;
+                    partsColored++;
+                }
+                html += `</div>`;
+            }
+            return html + '</div>';
+        }
+
+        function spawnItem() {
+            itemY = -250;
+            ui.fallingItem.style.transition = 'none';
+            ui.fallingItem.style.transform = `translateY(${itemY}px) scale(1)`;
+            ui.fallingItem.style.opacity = '1';
+            ui.fallingItem.innerHTML = generateData();
+            ui.fallingItem.classList.remove('hidden');
+            isAnimatingSort = false;
+        }
+
+        function updateHearts() {
+            ui.hearts.innerHTML = '❤️'.repeat(hearts) + '🖤'.repeat(5 - hearts);
+            if (hearts <= 0) gameOver();
+        }
+
+        function updateCombo(reset = false) {
+            if(reset) { combo = 0; ui.comboText.classList.remove('show-combo'); return; }
+            combo++;
+            ui.comboCount.innerText = combo;
+            ui.comboText.classList.add('show-combo');
+            setTimeout(() => ui.comboText.classList.remove('show-combo'), 300);
+            if(combo >= 5 && !isFever) activateFever();
+        }
+
+        function activateFever() {
+            isFever = true; playSound('fever');
+            ui.feverText.classList.remove('hidden'); ui.feverOverlay.classList.remove('opacity-0'); ui.multiplierBadge.classList.remove('hidden');
+            ui.fallingItem.classList.add('fever-active');
+            
+            clearTimeout(feverTimeout);
+            feverTimeout = setTimeout(() => {
+                isFever = false; combo = 0;
+                ui.feverText.classList.add('hidden'); ui.feverOverlay.classList.add('opacity-0'); ui.multiplierBadge.classList.add('hidden');
+                ui.fallingItem.classList.remove('fever-active');
+            }, 10000);
+        }
+
+        function checkLevel() {
+            if (score >= 50) {
+                ui.gameArea.className = "flex-1 relative w-full max-w-2xl mx-auto flex justify-center border-x-[12px] border-indigo-950 overflow-hidden z-10 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] transition-colors duration-700 conveyor-space conveyor-anim";
+                ui.body.className = "bg-indigo-950 flex flex-col transition-colors duration-700";
+                ui.header.className = "bg-indigo-900/95 backdrop-blur shadow-lg px-3 py-2 sm:p-4 flex justify-between items-center z-20 shrink-0 relative border-b-4 border-indigo-700";
+                ui.footer.className = "bg-indigo-900 p-4 sm:p-6 shrink-0 z-20 transition-colors border-t-8 border-indigo-700";
+                ui.levelTitle.innerHTML = "🚀 อวกาศเศษส่วน"; ui.levelTitle.className = "text-xl sm:text-3xl font-black text-indigo-200 hidden sm:block text-center flex-1 drop-shadow-sm";
+            } else if (score >= 20) {
+                ui.gameArea.className = "flex-1 relative w-full max-w-2xl mx-auto flex justify-center border-x-[12px] border-red-950 overflow-hidden z-10 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] transition-colors duration-700 conveyor-lava conveyor-anim";
+                ui.body.className = "bg-red-950 flex flex-col transition-colors duration-700";
+                ui.header.className = "bg-red-900/95 backdrop-blur shadow-lg px-3 py-2 sm:p-4 flex justify-between items-center z-20 shrink-0 relative border-b-4 border-red-800";
+                ui.footer.className = "bg-red-900 p-4 sm:p-6 shrink-0 z-20 transition-colors border-t-8 border-red-800";
+                ui.levelTitle.innerHTML = "🌋 ลาวาเดือด"; ui.levelTitle.className = "text-xl sm:text-3xl font-black text-red-200 hidden sm:block text-center flex-1 drop-shadow-sm";
+            } else {
+                ui.gameArea.className = "flex-1 relative w-full max-w-2xl mx-auto flex justify-center bg-gray-900 border-x-[12px] border-gray-800 overflow-hidden z-10 shadow-[inset_0_0_50px_rgba(0,0,0,0.8)] transition-colors duration-700 conveyor-normal conveyor-anim";
+                ui.body.className = "bg-blue-50 flex flex-col transition-colors duration-700";
+                ui.header.className = "bg-white/95 backdrop-blur shadow-lg px-3 py-2 sm:p-4 flex justify-between items-center z-20 shrink-0 relative border-b-4 border-gray-200";
+                ui.footer.className = "bg-gray-100 p-4 sm:p-6 shrink-0 z-20 transition-colors border-t-8 border-gray-300";
+                ui.levelTitle.innerHTML = "🏭 โรงงานคัดแยก"; ui.levelTitle.className = "text-xl sm:text-3xl font-black text-gray-800 hidden sm:block text-center flex-1 transition-colors drop-shadow-sm";
+            }
+        }
+
+        function updateGame() {
+            if (!isPlaying) return;
+            if (!isAnimatingSort) {
+                itemY += (baseSpeed * speedMultiplier);
+                ui.fallingItem.style.transform = `translateY(${itemY}px)`;
+
+                if (itemY > ui.gameArea.clientHeight) {
+                    if (['proper', 'improper'].includes(currentItemType)) {
+                        hearts--; playSound('wrong'); updateCombo(true); updateHearts();
+                        ui.gameArea.classList.add('brightness-50');
+                        setTimeout(() => ui.gameArea.classList.remove('brightness-50'), 150);
+                    } else if (currentItemType === 'bomb') {
+                        score += 1; ui.score.innerText = score; checkLevel();
+                    }
+                    if(hearts > 0) spawnItem();
+                }
+            }
+            if(isPlaying) animationFrameId = requestAnimationFrame(updateGame);
+        }
+
+        let choice = '';
+
+        function sortItem(c, event) {
+            if (!isPlaying || isAnimatingSort) return;
+            isAnimatingSort = true;
+            choice = c;
+            
+            ui.fallingItem.style.transition = 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s';
+            const direction = choice === 'proper' ? -400 : 400;
+            const rotation = choice === 'proper' ? -45 : 45;
+            
+            ui.fallingItem.style.transform = `translateY(${itemY}px) translateX(${direction}px) rotate(${rotation}deg) scale(0.5)`;
+            ui.fallingItem.style.opacity = '0';
+
+            setTimeout(() => {
+                if (currentItemType === 'bomb') {
+                    playSound('bomb'); hearts--; updateCombo(true); updateHearts();
+                } else if (currentItemType === 'heart') {
+                    playSound('heart'); if(hearts < 5) hearts++; updateHearts();
+                } else if (currentItemType === 'hourglass') {
+                    playSound('hourglass'); 
+                    speedMultiplier = 0.5; ui.slowOverlay.classList.remove('opacity-0');
+                    clearTimeout(slowTimeout);
+                    slowTimeout = setTimeout(() => { speedMultiplier = 1.0; ui.slowOverlay.classList.add('opacity-0'); }, 5000);
+                } 
+                else {
+                    if (choice === currentItemType) {
+                        playSound('correct'); 
+                        const pts = isFever ? 2 : 1;
+                        score += pts; 
+                        ui.score.innerText = score;
+                        
+                        const popup = document.createElement('div');
+                        popup.innerText = `+${pts}`;
+                        popup.className = `score-popup`;
+                        popup.style.left = choice === 'proper' ? '20%' : '70%';
+                        popup.style.bottom = '180px'; 
+                        document.body.appendChild(popup);
+                        setTimeout(() => popup.remove(), 800);
+
+                        updateCombo(); checkLevel();
+                        
+                        // ระบบคำนวณความเร็วใหม่: ค่อยๆ เพิ่มตามคะแนน แต่ไม่เกิน 6.5
+                        baseSpeed = Math.min(6.5, 1.5 + Math.floor(score / 5) * 0.25);
+                        
+                    } else {
+                        playSound('wrong'); hearts--; updateCombo(true); updateHearts();
+                    }
+                }
+                if (hearts > 0) spawnItem();
+            }, 300);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') sortItem('proper', null);
+            if (e.key === 'ArrowRight') sortItem('improper', null);
+        });
+        document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+        function startGame() {
+            initAudio();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over').classList.add('hidden');
+            
+            // เซ็ตค่าความเร็วเริ่มต้นกลับเป็น 1.5 ทุกครั้งที่เริ่มเกมใหม่
+            score = 0; hearts = 5; baseSpeed = 1.5; speedMultiplier = 1.0;
+            isFever = false; combo = 0;
+            clearTimeout(feverTimeout); clearTimeout(slowTimeout);
+            
+            ui.score.innerText = score;
+            ui.comboText.classList.remove('show-combo');
+            ui.feverOverlay.classList.add('opacity-0'); ui.slowOverlay.classList.add('opacity-0');
+            ui.feverText.classList.add('hidden'); ui.multiplierBadge.classList.add('hidden');
+            
+            checkLevel(); updateHearts();
+            isPlaying = true; spawnItem(); updateGame();
+        }
+
+        function gameOver() {
+            isPlaying = false;
+            cancelAnimationFrame(animationFrameId);
+            ui.fallingItem.classList.add('hidden');
+            
+            document.getElementById('final-score').innerText = score;
+            let rank = "🐣 เริ่มต้น";
+            if(score >= 100) rank = "👑 เทพเจ้าอาร์เคด";
+            else if(score >= 60) rank = "🚀 ปรมาจารย์";
+            else if(score >= 30) rank = "🏭 หัวหน้าแผนก";
+            else if(score >= 10) rank = "🛠️ พนักงานดีเด่น";
+            document.getElementById('rank-title').innerText = rank;
+
+            document.getElementById('game-over').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
